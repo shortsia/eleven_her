@@ -15,8 +15,8 @@ class ElevenHerApp extends StatelessWidget {
       title: 'ElevenHer',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF121212), // Fondo muy oscuro
-        primaryColor: const Color(0xFF00FF87), // Verde Neón
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        primaryColor: const Color(0xFF00FF87),
         useMaterial3: true,
       ),
       home: const HomeScreen(),
@@ -37,6 +37,9 @@ class _HomeScreenState extends State<HomeScreen> {
   List<dynamic> _partidos = [];
   bool _cargando = true;
 
+  // 1. VARIABLE PARA LA FECHA SELECCIONADA (Empieza hoy)
+  DateTime _fechaSeleccionada = DateTime.now();
+
   @override
   void initState() {
     super.initState();
@@ -44,15 +47,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _cargarPartidos() async {
-    print('⚽ Cargando partidos VIP en la pantalla...');
-
-    // Llamamos a tu servicio (que ya tiene el filtro de ligas)
-    var nuevosPartidos = await _apiService.getLiveMatches();
+    // 2. PASAMOS LA FECHA ELEGIDA AL SERVICIO
+    var nuevosPartidos = await _apiService.getMatches(_fechaSeleccionada);
 
     setState(() {
       _partidos = nuevosPartidos;
       _cargando = false;
     });
+  }
+
+  // Función para cambiar de día al tocar un botón
+  void _cambiarFecha(DateTime nuevaFecha) {
+    setState(() {
+      _fechaSeleccionada = nuevaFecha;
+      _cargando = true; // Mostramos cargando mientras busca
+      _partidos = []; // Limpiamos la lista vieja visualmente
+    });
+    _cargarPartidos();
   }
 
   @override
@@ -66,219 +77,275 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(
             color: Color(0xFF00FF87),
             fontWeight: FontWeight.bold,
-            fontSize: 24,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () {
-              setState(() {
-                _cargando = true;
-              });
-              _cargarPartidos();
-            },
-          ),
-        ],
+        centerTitle: true,
       ),
-      body: _cargando
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00FF87)),
-            )
-          : _partidos.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.sports_soccer, size: 60, color: Colors.grey),
-                  const SizedBox(height: 20),
-                  Text(
-                    "No hay partidos VIP hoy",
-                    style: TextStyle(color: Colors.grey[400], fontSize: 16),
-                  ),
-                ],
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: _partidos.length,
+      body: Column(
+        children: [
+          // --- BARRA DE FECHAS (CALENDARIO) ---
+          Container(
+            height: 70,
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: 5, // Mostramos 5 días (Ayer, Hoy, +1, +2, +3)
               itemBuilder: (context, index) {
-                var partido = _partidos[index];
-                var equipoLocal = partido['teams']['home'];
-                var equipoVisita = partido['teams']['away'];
-                var goles = partido['goals'];
-                var estado =
-                    partido['fixture']['status']['short']; // Ej: FT, NS, 1H
-                var liga = partido['league']; // Datos de la liga
+                // Truco matemático: index 0 es Ayer (-1 dia), index 1 es Hoy (0 dias), etc.
+                DateTime fechaBoton = DateTime.now().add(
+                  Duration(days: index - 1),
+                );
 
-                return Card(
-                  color: const Color(0xFF1E1E1E), // Tarjeta gris oscura
-                  margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 4,
-                  child: Column(
-                    children: [
-                      // --- CABECERA DE LA LIGA (Nuevo Diseño) ---
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 16,
-                        ),
-                        decoration: const BoxDecoration(
-                          color: Colors.black26, // Cabecera más oscura
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(16),
+                bool esHoy = index == 1; // El segundo botón es HOY
+                bool estaSeleccionado =
+                    fechaBoton.day == _fechaSeleccionada.day &&
+                    fechaBoton.month == _fechaSeleccionada.month;
+
+                // Nombres de días simples
+                List<String> diasSemana = [
+                  'Lun',
+                  'Mar',
+                  'Mié',
+                  'Jue',
+                  'Vie',
+                  'Sáb',
+                  'Dom',
+                ];
+                String nombreDia = esHoy
+                    ? "HOY"
+                    : diasSemana[fechaBoton.weekday - 1];
+
+                return GestureDetector(
+                  onTap: () => _cambiarFecha(fechaBoton),
+                  child: Container(
+                    width: 70,
+                    margin: const EdgeInsets.symmetric(horizontal: 5),
+                    decoration: BoxDecoration(
+                      color: estaSeleccionado
+                          ? const Color(0xFF00FF87)
+                          : const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(
+                        color: estaSeleccionado
+                            ? const Color(0xFF00FF87)
+                            : Colors.grey.shade800,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          nombreDia,
+                          style: TextStyle(
+                            color: estaSeleccionado
+                                ? Colors.black
+                                : Colors.grey,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            // Logo de la liga
-                            Image.network(
-                              liga['logo'],
-                              height: 20,
-                              width: 20,
-                              errorBuilder: (c, o, s) => const Icon(
-                                Icons.emoji_events,
-                                size: 20,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            // Nombre de la liga
-                            Expanded(
-                              child: Text(
-                                liga['name'].toString().toUpperCase(),
-                                style: TextStyle(
-                                  color: Colors.grey[400],
-                                  fontSize: 11,
-                                  letterSpacing: 1.2,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_forward_ios,
-                              size: 12,
-                              color: Colors.grey,
-                            ),
-                          ],
+                        const SizedBox(height: 5),
+                        Text(
+                          "${fechaBoton.day}",
+                          style: TextStyle(
+                            color: estaSeleccionado
+                                ? Colors.black
+                                : Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
                         ),
-                      ),
-
-                      // --- EL PARTIDO (EQUIPOS Y MARCADOR) ---
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Row(
-                          children: [
-                            // EQUIPO LOCAL
-                            Expanded(
-                              child: Column(
-                                children: [
-                                  Image.network(
-                                    equipoLocal['logo'],
-                                    height: 50,
-                                    errorBuilder: (c, o, s) => const Icon(
-                                      Icons.shield,
-                                      size: 50,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    equipoLocal['name'],
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // MARCADOR CENTRAL
-                            Container(
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    estado ?? "-",
-                                    style: const TextStyle(
-                                      color: Color(0xFF00FF87),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: Colors.grey.shade800,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      '${goles['home'] ?? 0} - ${goles['away'] ?? 0}',
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // EQUIPO VISITA
-                            Expanded(
-                              child: Column(
-                                children: [
-                                  Image.network(
-                                    equipoVisita['logo'],
-                                    height: 50,
-                                    errorBuilder: (c, o, s) => const Icon(
-                                      Icons.shield,
-                                      size: 50,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    equipoVisita['name'],
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               },
             ),
+          ),
+
+          // --- LISTA DE PARTIDOS ---
+          Expanded(
+            child: _cargando
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF00FF87)),
+                  )
+                : _partidos.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.calendar_today,
+                          size: 50,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          "Sin partidos VIP esta fecha",
+                          style: TextStyle(color: Colors.grey[400]),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: _partidos.length,
+                    itemBuilder: (context, index) {
+                      var partido = _partidos[index];
+                      var equipoLocal = partido['teams']['home'];
+                      var equipoVisita = partido['teams']['away'];
+                      var goles = partido['goals'];
+                      var estado = partido['fixture']['status']['short'];
+                      var liga = partido['league'];
+
+                      return Card(
+                        color: const Color(0xFF1E1E1E),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 4,
+                        child: Column(
+                          children: [
+                            // Cabecera Liga
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 8,
+                                horizontal: 16,
+                              ),
+                              decoration: const BoxDecoration(
+                                color: Colors.black26,
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(16),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Image.network(
+                                    liga['logo'],
+                                    height: 20,
+                                    width: 20,
+                                    errorBuilder: (c, o, s) => const Icon(
+                                      Icons.emoji_events,
+                                      size: 20,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      liga['name'].toString().toUpperCase(),
+                                      style: TextStyle(
+                                        color: Colors.grey[400],
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Partido
+                            Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      children: [
+                                        Image.network(
+                                          equipoLocal['logo'],
+                                          height: 45,
+                                          errorBuilder: (c, o, s) => const Icon(
+                                            Icons.shield,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          equipoLocal['name'],
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          maxLines: 2,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    children: [
+                                      Text(
+                                        estado ?? "-",
+                                        style: const TextStyle(
+                                          color: Color(0xFF00FF87),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 5),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.grey.shade800,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${goles['home'] ?? 0} - ${goles['away'] ?? 0}',
+                                          style: const TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Expanded(
+                                    child: Column(
+                                      children: [
+                                        Image.network(
+                                          equipoVisita['logo'],
+                                          height: 45,
+                                          errorBuilder: (c, o, s) => const Icon(
+                                            Icons.shield,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          equipoVisita['name'],
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          maxLines: 2,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
