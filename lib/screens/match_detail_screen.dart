@@ -1,21 +1,52 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart'; // Importamos el servicio para pedir los goles
 
-class MatchDetailScreen extends StatelessWidget {
-  // Aquí recibimos todos los datos del partido que tocaste
+class MatchDetailScreen extends StatefulWidget {
   final dynamic partido;
 
   const MatchDetailScreen({super.key, required this.partido});
 
   @override
+  State<MatchDetailScreen> createState() => _MatchDetailScreenState();
+}
+
+class _MatchDetailScreenState extends State<MatchDetailScreen> {
+  final ApiService _apiService = ApiService();
+  List<dynamic> _eventos = []; // Aquí guardaremos los goles
+  bool _cargando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarDetalles();
+  }
+
+  // Pedimos los goles a la API usando el ID del partido
+  void _cargarDetalles() async {
+    int idPartido = widget.partido['fixture']['id'];
+    var eventosEncontrados = await _apiService.getMatchEvents(idPartido);
+
+    // Solo nos interesan Goles y Tarjetas Rojas (filtramos lo demás)
+    var eventosImportantes = eventosEncontrados.where((e) {
+      return e['type'] == 'Goal' || e['detail'] == 'Red Card';
+    }).toList();
+
+    if (mounted) {
+      setState(() {
+        _eventos = eventosImportantes;
+        _cargando = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Sacamos los datos para usarlos fácil
-    var local = partido['teams']['home'];
-    var visita = partido['teams']['away'];
-    var goles = partido['goals'];
-    var liga = partido['league'];
-    var info = partido['fixture']; // Aquí está el estadio, árbitro, fecha...
-    var estado =
-        partido['fixture']['status']['long']; // Estado completo (ej: Match Finished)
+    var local = widget.partido['teams']['home'];
+    var visita = widget.partido['teams']['away'];
+    var goles = widget.partido['goals'];
+    var liga = widget.partido['league'];
+    var info = widget.partido['fixture'];
+    var estado = widget.partido['fixture']['status']['long'];
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -24,7 +55,7 @@ class MatchDetailScreen extends StatelessWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-          onPressed: () => Navigator.pop(context), // Botón para regresar
+          onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           liga['name'],
@@ -37,14 +68,13 @@ class MatchDetailScreen extends StatelessWidget {
           children: [
             const SizedBox(height: 20),
 
-            // --- MARCADOR GIGANTE ---
+            // --- MARCADOR ---
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // LOCAL
                 Column(
                   children: [
-                    Image.network(local['logo'], height: 80),
+                    Image.network(local['logo'], height: 70),
                     const SizedBox(height: 10),
                     SizedBox(
                       width: 100,
@@ -59,7 +89,6 @@ class MatchDetailScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                // GOLES
                 Text(
                   '${goles['home'] ?? 0} - ${goles['away'] ?? 0}',
                   style: const TextStyle(
@@ -68,10 +97,9 @@ class MatchDetailScreen extends StatelessWidget {
                     color: Color(0xFF00FF87),
                   ),
                 ),
-                // VISITA
                 Column(
                   children: [
-                    Image.network(visita['logo'], height: 80),
+                    Image.network(visita['logo'], height: 70),
                     const SizedBox(height: 10),
                     SizedBox(
                       width: 100,
@@ -88,14 +116,116 @@ class MatchDetailScreen extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 10),
             Text(estado, style: const TextStyle(color: Colors.grey)),
-            const SizedBox(height: 30),
 
-            // --- TARJETA DE INFORMACIÓN (ESTADIO, HORA, ETC) ---
+            const SizedBox(height: 20),
+            const Divider(color: Colors.grey),
+
+            // --- SECCIÓN DE GOLES Y EVENTOS ---
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Text(
+                "EVENTOS DEL PARTIDO",
+                style: TextStyle(
+                  color: Color(0xFF00FF87),
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+
+            _cargando
+                ? const CircularProgressIndicator(color: Color(0xFF00FF87))
+                : _eventos.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                      "No hay datos de goles disponibles.",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap:
+                        true, // Importante para que funcione dentro del Column
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _eventos.length,
+                    itemBuilder: (context, index) {
+                      var evento = _eventos[index];
+                      var equipo = evento['team']['name'];
+                      var jugador = evento['player']['name'];
+                      var minuto = evento['time']['elapsed'];
+                      var tipo = evento['type']; // 'Goal' o 'Card'
+                      var esGol = tipo == 'Goal';
+
+                      // ¿Fue el equipo local? (Para ponerlo a la izquierda o derecha)
+                      bool esLocal = (evento['team']['id'] == local['id']);
+
+                      return Container(
+                        margin: const EdgeInsets.symmetric(
+                          vertical: 5,
+                          horizontal: 20,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: esLocal
+                              ? MainAxisAlignment.start
+                              : MainAxisAlignment.end,
+                          children: [
+                            // Si es visita, ponemos espacio vacío a la izquierda
+                            if (!esLocal) const Spacer(),
+
+                            // LA CAJITA DEL EVENTO
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 15,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E1E1E),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.grey.shade800),
+                              ),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    "$minuto' ",
+                                    style: const TextStyle(
+                                      color: Color(0xFF00FF87),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    jugador,
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Icon(
+                                    esGol
+                                        ? Icons.sports_soccer
+                                        : Icons.style, // Balón o Tarjeta
+                                    color: esGol
+                                        ? Colors.white
+                                        : Colors.red, // Blanco o Rojo
+                                    size: 18,
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // Si es local, ponemos espacio vacío a la derecha
+                            if (esLocal) const Spacer(),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+
+            const SizedBox(height: 20),
+
+            // --- FICHA TÉCNICA (Info Extra) ---
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20),
+              margin: const EdgeInsets.all(20),
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: const Color(0xFF1E1E1E),
@@ -103,25 +233,13 @@ class MatchDetailScreen extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  _filaDetalle(
+                  _fila(
                     Icons.stadium,
                     "Estadio",
                     info['venue']['name'] ?? "Por definir",
                   ),
-                  const Divider(color: Colors.black45),
-                  _filaDetalle(
-                    Icons.location_on,
-                    "Ciudad",
-                    info['venue']['city'] ?? "Desconocida",
-                  ),
-                  const Divider(color: Colors.black45),
-                  _filaDetalle(
-                    Icons.sports,
-                    "Árbitro",
-                    info['referee'] ?? "No asignado",
-                  ),
-                  const Divider(color: Colors.black45),
-                  _filaDetalle(
+                  const SizedBox(height: 10),
+                  _fila(
                     Icons.calendar_today,
                     "Fecha",
                     info['date'].toString().substring(0, 10),
@@ -135,25 +253,21 @@ class MatchDetailScreen extends StatelessWidget {
     );
   }
 
-  // Una pequeña fábrica de filas para no repetir código
-  Widget _filaDetalle(IconData icono, String titulo, String valor) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Icon(icono, color: const Color(0xFF00FF87), size: 20),
-          const SizedBox(width: 15),
-          Text(titulo, style: const TextStyle(color: Colors.grey)),
-          const Spacer(),
-          Text(
-            valor,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
+  Widget _fila(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.grey, size: 18),
+        const SizedBox(width: 10),
+        Text(label, style: const TextStyle(color: Colors.grey)),
+        const Spacer(),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
