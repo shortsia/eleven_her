@@ -5,7 +5,6 @@ class ApiService {
   final String apiKey = '485cacc4493fd838702f7bec01925c8c';
   final String baseUrl = 'https://v3.football.api-sports.io';
 
-  // LISTA VIP
   final List<int> ligasVip = [
     39,
     140,
@@ -21,22 +20,19 @@ class ApiService {
     13,
   ];
 
-  // 1. OBTENER LISTA DE PARTIDOS
+  // 1. OBTENER PARTIDOS
   Future<List<dynamic>> getMatches(DateTime fecha) async {
     try {
       String fechaFormateada = fecha.toIso8601String().split('T')[0];
       var url = Uri.parse('$baseUrl/fixtures?date=$fechaFormateada');
-
       var response = await http.get(url, headers: {'x-apisports-key': apiKey});
 
       if (response.statusCode == 200) {
         var data = jsonDecode(response.body);
         var todos = data['response'] as List;
-
         var filtrados = todos
             .where((p) => ligasVip.contains(p['league']['id']))
             .toList();
-
         filtrados.sort(
           (a, b) => a['fixture']['date'].compareTo(b['fixture']['date']),
         );
@@ -45,27 +41,44 @@ class ApiService {
         return [];
       }
     } catch (e) {
-      print('Error: $e');
+      print('Error matches: $e');
       return [];
     }
   }
 
-  // --- NUEVA FUNCIÓN: OBTENER LOS GOLES Y EVENTOS DE UN PARTIDO ---
+  // 2. OBTENER GOLES
   Future<List<dynamic>> getMatchEvents(int fixtureId) async {
     try {
-      // Pedimos específicamente los eventos de ESTE partido ID
       var url = Uri.parse('$baseUrl/fixtures/events?fixture=$fixtureId');
+      var response = await http.get(url, headers: {'x-apisports-key': apiKey});
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body)['response'];
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // 3. NUEVA FUNCIÓN: OBTENER TABLA DE POSICIONES
+  Future<List<dynamic>> getStandings(int leagueId, int season) async {
+    try {
+      // Pedimos la tabla de esa liga y esa temporada
+      var url = Uri.parse('$baseUrl/standings?league=$leagueId&season=$season');
+      print('🔍 Buscando tabla: $url');
 
       var response = await http.get(url, headers: {'x-apisports-key': apiKey});
 
       if (response.statusCode == 200) {
         var data = jsonDecode(response.body);
-        return data['response']; // Devolvemos la lista de goles/tarjetas
-      } else {
-        return [];
+        // La estructura es un poco compleja: response[0] -> league -> standings[0] (la tabla)
+        if (data['response'].isNotEmpty) {
+          return data['response'][0]['league']['standings'][0];
+        }
       }
+      return [];
     } catch (e) {
-      print('Error eventos: $e');
+      print('Error tabla: $e');
       return [];
     }
   }

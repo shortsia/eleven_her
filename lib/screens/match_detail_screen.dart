@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart'; // Importamos el servicio para pedir los goles
+import '../services/api_service.dart';
+import 'standings_screen.dart'; // <--- IMPORTANTE: Importamos la pantalla de tabla
 
 class MatchDetailScreen extends StatefulWidget {
   final dynamic partido;
@@ -12,7 +13,7 @@ class MatchDetailScreen extends StatefulWidget {
 
 class _MatchDetailScreenState extends State<MatchDetailScreen> {
   final ApiService _apiService = ApiService();
-  List<dynamic> _eventos = []; // Aquí guardaremos los goles
+  List<dynamic> _eventos = [];
   bool _cargando = true;
 
   @override
@@ -21,12 +22,10 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     _cargarDetalles();
   }
 
-  // Pedimos los goles a la API usando el ID del partido
   void _cargarDetalles() async {
     int idPartido = widget.partido['fixture']['id'];
     var eventosEncontrados = await _apiService.getMatchEvents(idPartido);
 
-    // Solo nos interesan Goles y Tarjetas Rojas (filtramos lo demás)
     var eventosImportantes = eventosEncontrados.where((e) {
       return e['type'] == 'Goal' || e['detail'] == 'Red Card';
     }).toList();
@@ -62,11 +61,56 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           style: const TextStyle(color: Colors.white, fontSize: 16),
         ),
         centerTitle: true,
+        actions: [
+          // --- BOTÓN NUEVO: VER TABLA ---
+          IconButton(
+            icon: const Icon(Icons.table_chart, color: Color(0xFF00FF87)),
+            onPressed: () {
+              // Navegar a la pantalla de Tabla
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => StandingsScreen(
+                    leagueId: liga['id'],
+                    season: liga['season'], // Pasamos el año de la temporada
+                    leagueName: liga['name'],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            const SizedBox(height: 20),
+            // --- BOTÓN GRANDE PARA VER TABLA (OPCIONAL) ---
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => StandingsScreen(
+                        leagueId: liga['id'],
+                        season: liga['season'],
+                        leagueName: liga['name'],
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.emoji_events, color: Colors.black),
+                label: const Text("VER TABLA DE POSICIONES"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00FF87),
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 45),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 10),
 
             // --- MARCADOR ---
             Row(
@@ -122,11 +166,11 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
             const SizedBox(height: 20),
             const Divider(color: Colors.grey),
 
-            // --- SECCIÓN DE GOLES Y EVENTOS ---
+            // --- EVENTOS ---
             const Padding(
               padding: EdgeInsets.all(8.0),
               child: Text(
-                "EVENTOS DEL PARTIDO",
+                "EVENTOS",
                 style: TextStyle(
                   color: Color(0xFF00FF87),
                   fontWeight: FontWeight.bold,
@@ -141,24 +185,20 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                 ? const Padding(
                     padding: EdgeInsets.all(20),
                     child: Text(
-                      "No hay datos de goles disponibles.",
+                      "Sin eventos registrados.",
                       style: TextStyle(color: Colors.grey),
                     ),
                   )
                 : ListView.builder(
-                    shrinkWrap:
-                        true, // Importante para que funcione dentro del Column
+                    shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _eventos.length,
                     itemBuilder: (context, index) {
                       var evento = _eventos[index];
-                      var equipo = evento['team']['name'];
                       var jugador = evento['player']['name'];
                       var minuto = evento['time']['elapsed'];
-                      var tipo = evento['type']; // 'Goal' o 'Card'
+                      var tipo = evento['type'];
                       var esGol = tipo == 'Goal';
-
-                      // ¿Fue el equipo local? (Para ponerlo a la izquierda o derecha)
                       bool esLocal = (evento['team']['id'] == local['id']);
 
                       return Container(
@@ -171,10 +211,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                               ? MainAxisAlignment.start
                               : MainAxisAlignment.end,
                           children: [
-                            // Si es visita, ponemos espacio vacío a la izquierda
                             if (!esLocal) const Spacer(),
-
-                            // LA CAJITA DEL EVENTO
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 15,
@@ -201,19 +238,13 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                                   ),
                                   const SizedBox(width: 10),
                                   Icon(
-                                    esGol
-                                        ? Icons.sports_soccer
-                                        : Icons.style, // Balón o Tarjeta
-                                    color: esGol
-                                        ? Colors.white
-                                        : Colors.red, // Blanco o Rojo
+                                    esGol ? Icons.sports_soccer : Icons.style,
+                                    color: esGol ? Colors.white : Colors.red,
                                     size: 18,
                                   ),
                                 ],
                               ),
                             ),
-
-                            // Si es local, ponemos espacio vacío a la derecha
                             if (esLocal) const Spacer(),
                           ],
                         ),
@@ -223,7 +254,6 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
 
             const SizedBox(height: 20),
 
-            // --- FICHA TÉCNICA (Info Extra) ---
             Container(
               margin: const EdgeInsets.all(20),
               padding: const EdgeInsets.all(20),
