@@ -39,13 +39,15 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _cargando = true;
   DateTime _fechaSeleccionada = DateTime.now();
 
+  // 1. VARIABLE PARA EL FILTRO (Empieza mostrando 'Todos')
+  String _filtroLiga = 'Todos';
+
   @override
   void initState() {
     super.initState();
     _cargarPartidos();
   }
 
-  // AHORA DEVUELVE UN "FUTURE" PARA QUE EL "PULL TO REFRESH" SEPA CUANDO PARAR
   Future<void> _cargarPartidos() async {
     var nuevosPartidos = await _apiService.getMatches(_fechaSeleccionada);
     setState(() {
@@ -59,12 +61,25 @@ class _HomeScreenState extends State<HomeScreen> {
       _fechaSeleccionada = nuevaFecha;
       _cargando = true;
       _partidos = [];
+      _filtroLiga = 'Todos'; // Resetear filtro al cambiar de día
     });
     _cargarPartidos();
   }
 
   @override
   Widget build(BuildContext context) {
+    // 2. FILTRAR LA LISTA ANTES DE MOSTRARLA
+    var partidosAVisualizar = _partidos.where((p) {
+      if (_filtroLiga == 'Todos') return true;
+      return p['league']['name'] == _filtroLiga;
+    }).toList();
+
+    // Sacamos los nombres de las ligas disponibles hoy para crear los botones
+    Set<String> ligasDisponibles = {'Todos'};
+    for (var p in _partidos) {
+      ligasDisponibles.add(p['league']['name']);
+    }
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -77,14 +92,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         centerTitle: true,
-        // YA NO NECESITAMOS EL BOTÓN DE REFRESCAR AQUÍ
       ),
       body: Column(
         children: [
           // --- CALENDARIO ---
           Container(
             height: 70,
-            margin: const EdgeInsets.only(bottom: 10),
+            margin: const EdgeInsets.only(bottom: 5),
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: 5,
@@ -112,18 +126,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 return GestureDetector(
                   onTap: () => _cambiarFecha(fechaBoton),
                   child: Container(
-                    width: 70,
-                    margin: const EdgeInsets.symmetric(horizontal: 5),
+                    width: 60,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
                       color: estaSeleccionado
                           ? const Color(0xFF00FF87)
                           : const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(
-                        color: estaSeleccionado
-                            ? const Color(0xFF00FF87)
-                            : Colors.grey.shade800,
-                      ),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -135,10 +144,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ? Colors.black
                                 : Colors.grey,
                             fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                            fontSize: 11,
                           ),
                         ),
-                        const SizedBox(height: 5),
                         Text(
                           "${fechaBoton.day}",
                           style: TextStyle(
@@ -146,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ? Colors.black
                                 : Colors.white,
                             fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                            fontSize: 16,
                           ),
                         ),
                       ],
@@ -157,42 +165,69 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // --- LISTA DE PARTIDOS CON "PULL TO REFRESH" ---
+          // --- 3. BARRA DE FILTROS (CHIPS) ---
+          if (!_cargando && _partidos.isNotEmpty)
+            Container(
+              height: 40,
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                children: ligasDisponibles.map((nombreLiga) {
+                  bool activo = _filtroLiga == nombreLiga;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: FilterChip(
+                      label: Text(nombreLiga),
+                      selected: activo,
+                      onSelected: (bool selected) {
+                        setState(() {
+                          _filtroLiga = nombreLiga;
+                        });
+                      },
+                      backgroundColor: const Color(0xFF1E1E1E),
+                      selectedColor: const Color(0xFF00FF87).withOpacity(0.2),
+                      labelStyle: TextStyle(
+                        color: activo ? const Color(0xFF00FF87) : Colors.white,
+                      ),
+                      checkmarkColor: const Color(0xFF00FF87),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(
+                          color: activo
+                              ? const Color(0xFF00FF87)
+                              : Colors.grey.shade800,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+          // --- LISTA DE PARTIDOS ---
           Expanded(
             child: _cargando
                 ? const Center(
                     child: CircularProgressIndicator(color: Color(0xFF00FF87)),
                   )
-                : _partidos.isEmpty
+                : partidosAVisualizar.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.calendar_today,
-                          size: 50,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          "Sin partidos VIP esta fecha",
-                          style: TextStyle(color: Colors.grey[400]),
-                        ),
-                      ],
+                    child: Text(
+                      "No hay partidos en esta categoría",
+                      style: TextStyle(color: Colors.grey[400]),
                     ),
                   )
                 : RefreshIndicator(
-                    // <--- AQUÍ ESTÁ LA MAGIA
-                    color: const Color(0xFF121212), // Color de la flecha
-                    backgroundColor: const Color(
-                      0xFF00FF87,
-                    ), // Fondo del círculo
-                    onRefresh: _cargarPartidos, // Qué hacer cuando deslizas
+                    color: const Color(0xFF121212),
+                    backgroundColor: const Color(0xFF00FF87),
+                    onRefresh: _cargarPartidos,
                     child: ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: _partidos.length,
+                      itemCount: partidosAVisualizar.length,
                       itemBuilder: (context, index) {
-                        var partido = _partidos[index];
+                        var partido =
+                            partidosAVisualizar[index]; // Usamos la lista filtrada
                         var equipoLocal = partido['teams']['home'];
                         var equipoVisita = partido['teams']['away'];
                         var goles = partido['goals'];
