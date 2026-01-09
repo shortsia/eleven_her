@@ -38,8 +38,6 @@ class _HomeScreenState extends State<HomeScreen> {
   List<dynamic> _partidos = [];
   bool _cargando = true;
   DateTime _fechaSeleccionada = DateTime.now();
-
-  // 1. VARIABLE PARA EL FILTRO (Empieza mostrando 'Todos')
   String _filtroLiga = 'Todos';
 
   @override
@@ -61,20 +59,18 @@ class _HomeScreenState extends State<HomeScreen> {
       _fechaSeleccionada = nuevaFecha;
       _cargando = true;
       _partidos = [];
-      _filtroLiga = 'Todos'; // Resetear filtro al cambiar de día
+      _filtroLiga = 'Todos';
     });
     _cargarPartidos();
   }
 
   @override
   Widget build(BuildContext context) {
-    // 2. FILTRAR LA LISTA ANTES DE MOSTRARLA
     var partidosAVisualizar = _partidos.where((p) {
       if (_filtroLiga == 'Todos') return true;
       return p['league']['name'] == _filtroLiga;
     }).toList();
 
-    // Sacamos los nombres de las ligas disponibles hoy para crear los botones
     Set<String> ligasDisponibles = {'Todos'};
     for (var p in _partidos) {
       ligasDisponibles.add(p['league']['name']);
@@ -95,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          // --- CALENDARIO ---
+          // CALENDARIO
           Container(
             height: 70,
             margin: const EdgeInsets.only(bottom: 5),
@@ -165,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // --- 3. BARRA DE FILTROS (CHIPS) ---
+          // BARRA DE FILTROS
           if (!_cargando && _partidos.isNotEmpty)
             Container(
               height: 40,
@@ -205,7 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-          // --- LISTA DE PARTIDOS ---
+          // LISTA DE PARTIDOS
           Expanded(
             child: _cargando
                 ? const Center(
@@ -226,13 +222,71 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       itemCount: partidosAVisualizar.length,
                       itemBuilder: (context, index) {
-                        var partido =
-                            partidosAVisualizar[index]; // Usamos la lista filtrada
+                        var partido = partidosAVisualizar[index];
                         var equipoLocal = partido['teams']['home'];
                         var equipoVisita = partido['teams']['away'];
                         var goles = partido['goals'];
                         var estado = partido['fixture']['status']['short'];
+                        var minuto =
+                            partido['fixture']['status']['elapsed']; // Minuto del partido
                         var liga = partido['league'];
+
+                        // LOGICA DE COLORES SEGUN ESTADO
+                        bool esEnVivo = [
+                          '1H',
+                          'HT',
+                          '2H',
+                          'ET',
+                          'P',
+                          'BT',
+                        ].contains(estado);
+                        bool termino = ['FT', 'AET', 'PEN'].contains(estado);
+
+                        // Widget para el estado (LIVE rojo, FT verde, o gris)
+                        Widget widgetEstado;
+                        if (esEnVivo) {
+                          widgetEstado = Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(color: Colors.redAccent),
+                            ),
+                            child: Text(
+                              "LIVE $minuto'",
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            ),
+                          );
+                        } else if (termino) {
+                          widgetEstado = const Text(
+                            "FINAL",
+                            style: TextStyle(
+                              color: Color(0xFF00FF87),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                          );
+                        } else {
+                          // Si no ha empezado, mostramos la hora
+                          String hora = partido['fixture']['date']
+                              .toString()
+                              .substring(11, 16);
+                          widgetEstado = Text(
+                            hora,
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          );
+                        }
 
                         return GestureDetector(
                           onTap: () {
@@ -253,6 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             elevation: 4,
                             child: Column(
                               children: [
+                                // Cabecera Liga
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 8,
@@ -288,14 +343,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                      const Icon(
-                                        Icons.touch_app,
-                                        size: 14,
-                                        color: Color(0xFF00FF87),
-                                      ),
+                                      if (esEnVivo)
+                                        const Icon(
+                                          Icons.circle,
+                                          size: 8,
+                                          color: Colors.redAccent,
+                                        ), // Puntito rojo en la barra si es en vivo
                                     ],
                                   ),
                                 ),
+                                // Equipos y Marcador
                                 Padding(
                                   padding: const EdgeInsets.all(16.0),
                                   child: Row(
@@ -325,16 +382,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ],
                                         ),
                                       ),
+
+                                      // COLUMNA CENTRAL (MARCADOR Y ESTADO)
                                       Column(
                                         children: [
-                                          Text(
-                                            estado ?? "-",
-                                            style: const TextStyle(
-                                              color: Color(0xFF00FF87),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
+                                          widgetEstado, // AQUÍ VA EL "LIVE" O LA HORA
                                           const SizedBox(height: 5),
                                           Container(
                                             padding: const EdgeInsets.symmetric(
@@ -360,6 +412,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                         ],
                                       ),
+
                                       Expanded(
                                         child: Column(
                                           children: [
