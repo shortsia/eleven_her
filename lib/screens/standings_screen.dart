@@ -129,12 +129,14 @@ class _StandingsScreenState extends State<StandingsScreen> {
 
                       // Colores para zonas (Champions, Descenso)
                       Color colorPosicion = Colors.white;
-                      if (index < 4)
+                      if (index < 4) {
                         colorPosicion = const Color(
                           0xFF00FF87,
                         ); // Champions (Verde)
-                      if (index >= _tabla.length - 3)
+                      }
+                      if (index >= _tabla.length - 3) {
                         colorPosicion = Colors.redAccent; // Descenso (Rojo)
+                      }
 
                       return Container(
                         padding: const EdgeInsets.symmetric(
