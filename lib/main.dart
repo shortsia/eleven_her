@@ -371,9 +371,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     vertical: 8,
                                     horizontal: 16,
                                   ),
-                                  decoration: BoxDecoration(
+                                  decoration: const BoxDecoration(
                                     color: Colors.black26,
-                                    borderRadius: const BorderRadius.vertical(
+                                    borderRadius: BorderRadius.vertical(
                                       top: Radius.circular(16),
                                     ),
                                   ),
