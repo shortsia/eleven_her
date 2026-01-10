@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Importamos el cerebro
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/api_service.dart';
 import 'screens/match_detail_screen.dart';
 
@@ -41,17 +41,18 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime _fechaSeleccionada = DateTime.now();
   String _filtroLiga = 'Todos';
 
-  // LISTA DE EQUIPOS FAVORITOS (Ids guardados como texto)
+  // --- VARIABLES NUEVAS ---
+  bool _soloFavoritos = false; // El interruptor del filtro
   List<String> _favoritos = [];
 
   @override
   void initState() {
     super.initState();
-    _cargarFavoritos(); // Cargar memoria al iniciar
+    _cargarFavoritos();
     _cargarPartidos();
   }
 
-  // --- FUNCIONES DE MEMORIA ---
+  // --- MEMORIA Y FAVORITOS ---
   Future<void> _cargarFavoritos() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -65,21 +66,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       if (_favoritos.contains(idString)) {
-        _favoritos.remove(idString); // Si ya estaba, lo borramos
+        _favoritos.remove(idString);
       } else {
-        _favoritos.add(idString); // Si no estaba, lo guardamos
+        _favoritos.add(idString);
       }
     });
-
-    // Guardar en el disco del celular
     await prefs.setStringList('mis_equipos', _favoritos);
   }
 
   bool _esFavorito(int equipoId) {
     return _favoritos.contains(equipoId.toString());
   }
-  // ---------------------------
 
+  // --- CARGA DE DATOS ---
   Future<void> _cargarPartidos() async {
     var nuevosPartidos = await _apiService.getMatches(_fechaSeleccionada);
     setState(() {
@@ -94,18 +93,120 @@ class _HomeScreenState extends State<HomeScreen> {
       _cargando = true;
       _partidos = [];
       _filtroLiga = 'Todos';
+      // Si cambiamos de fecha, desactivamos el filtro de favoritos para ver qué hay
+      _soloFavoritos = false;
     });
     _cargarPartidos();
   }
 
+  // --- EL MENÚ LATERAL (DRAWER) ---
+  Widget _buildDrawer() {
+    return Drawer(
+      backgroundColor: const Color(0xFF1E1E1E),
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          UserAccountsDrawerHeader(
+            decoration: const BoxDecoration(
+              color: Colors.black,
+              image: DecorationImage(
+                image: NetworkImage(
+                  "https://media.istockphoto.com/id/1183568858/es/vector/patr%C3%B3n-de-f%C3%BAtbol-con-balones-de-f%C3%BAtbol-deportes-de-f%C3%BAtbol-fondo-verde.jpg?s=612x612&w=0&k=20&c=Xp2N3W_5jXUuQGH0qQKy-9F6V_C7O-2NqYk_1fKk-2k=",
+                ),
+                fit: BoxFit.cover,
+                opacity: 0.4,
+              ),
+            ),
+            accountName: const Text(
+              "ElevenHer",
+              style: TextStyle(
+                color: Color(0xFF00FF87),
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            ),
+            accountEmail: const Text(
+              "Tu App de Fútbol Favorita",
+              style: TextStyle(color: Colors.white70),
+            ),
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: const Color(0xFF00FF87),
+              child: const Icon(
+                Icons.sports_soccer,
+                size: 40,
+                color: Colors.black,
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.home, color: Color(0xFF00FF87)),
+            title: const Text(
+              'Inicio (Todos)',
+              style: TextStyle(color: Colors.white),
+            ),
+            onTap: () {
+              setState(() {
+                _soloFavoritos = false; // Apagar filtro
+                _filtroLiga = 'Todos';
+              });
+              Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.star, color: Colors.amber),
+            title: const Text(
+              'Mis Favoritos',
+              style: TextStyle(color: Colors.white),
+            ),
+            onTap: () {
+              setState(() {
+                _soloFavoritos = true; // Encender filtro
+              });
+              Navigator.pop(context);
+            },
+          ),
+          const Divider(color: Colors.grey),
+          ListTile(
+            leading: const Icon(Icons.info_outline, color: Colors.grey),
+            title: const Text(
+              'Acerca de',
+              style: TextStyle(color: Colors.white),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              showAboutDialog(
+                context: context,
+                applicationName: "ElevenHer",
+                applicationVersion: "1.3.0",
+                applicationIcon: const Icon(
+                  Icons.sports_soccer,
+                  size: 40,
+                  color: Color(0xFF00FF87),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // --- LÓGICA DE FILTRADO ---
     var partidosAVisualizar = _partidos.where((p) {
+      // 1. Filtro de Favoritos
+      if (_soloFavoritos) {
+        bool localEsFav = _esFavorito(p['teams']['home']['id']);
+        bool visitaEsFav = _esFavorito(p['teams']['away']['id']);
+        if (!localEsFav && !visitaEsFav) return false;
+      }
+      // 2. Filtro de Liga
       if (_filtroLiga == 'Todos') return true;
       return p['league']['name'] == _filtroLiga;
     }).toList();
 
-    // ORDENAR: Favoritos primero
+    // Ordenar: Favoritos primero
     partidosAVisualizar.sort((a, b) {
       int idLocalA = a['teams']['home']['id'];
       int idVisitaA = a['teams']['away']['id'];
@@ -115,9 +216,9 @@ class _HomeScreenState extends State<HomeScreen> {
       int idVisitaB = b['teams']['away']['id'];
       bool bEsFav = _esFavorito(idLocalB) || _esFavorito(idVisitaB);
 
-      if (aEsFav && !bEsFav) return -1; // A va primero
-      if (!aEsFav && bEsFav) return 1; // B va primero
-      return 0; // Iguales
+      if (aEsFav && !bEsFav) return -1;
+      if (!aEsFav && bEsFav) return 1;
+      return 0;
     });
 
     Set<String> ligasDisponibles = {'Todos'};
@@ -126,17 +227,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
+      drawer: _buildDrawer(), // AQUÍ ESTÁ EL MENÚ CONECTADO
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'ElevenHer ⚽',
-          style: TextStyle(
+        // TÍTULO DINÁMICO
+        title: Text(
+          _soloFavoritos ? 'Mis Favoritos ⭐' : 'ElevenHer ⚽',
+          style: const TextStyle(
             color: Color(0xFF00FF87),
             fontWeight: FontWeight.bold,
           ),
         ),
         centerTitle: true,
+        iconTheme: const IconThemeData(
+          color: Color(0xFF00FF87),
+        ), // Color del icono hamburguesa
       ),
       body: Column(
         children: [
@@ -210,8 +316,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // FILTROS
-          if (!_cargando && _partidos.isNotEmpty)
+          // FILTROS (Solo se muestran si NO estamos en modo Favoritos)
+          if (!_cargando && _partidos.isNotEmpty && !_soloFavoritos)
             Container(
               height: 40,
               margin: const EdgeInsets.only(bottom: 10),
@@ -250,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-          // LISTA
+          // LISTA DE PARTIDOS
           Expanded(
             child: _cargando
                 ? const Center(
@@ -258,9 +364,24 @@ class _HomeScreenState extends State<HomeScreen> {
                   )
                 : partidosAVisualizar.isEmpty
                 ? Center(
-                    child: Text(
-                      "No hay partidos",
-                      style: TextStyle(color: Colors.grey[400]),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _soloFavoritos
+                              ? Icons.star_border
+                              : Icons.sports_soccer,
+                          size: 50,
+                          color: Colors.grey[700],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _soloFavoritos
+                              ? "No juegan tus favoritos hoy"
+                              : "No hay partidos",
+                          style: TextStyle(color: Colors.grey[400]),
+                        ),
+                      ],
                     ),
                   )
                 : RefreshIndicator(
@@ -279,7 +400,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         var minuto = partido['fixture']['status']['elapsed'];
                         var liga = partido['league'];
 
-                        // Verificar Favoritos
                         bool esFavLocal = _esFavorito(equipoLocal['id']);
                         bool esFavVisita = _esFavorito(equipoVisita['id']);
                         bool hayFavorito = esFavLocal || esFavVisita;
@@ -349,7 +469,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           },
                           child: Card(
-                            // Si es favorito, pintamos el borde de dorado suave
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                               side: hayFavorito
@@ -371,9 +490,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     vertical: 8,
                                     horizontal: 16,
                                   ),
-                                  decoration: const BoxDecoration(
+                                  decoration: BoxDecoration(
                                     color: Colors.black26,
-                                    borderRadius: BorderRadius.vertical(
+                                    borderRadius: const BorderRadius.vertical(
                                       top: Radius.circular(16),
                                     ),
                                   ),
@@ -406,7 +525,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           Icons.star,
                                           size: 14,
                                           color: Colors.amber,
-                                        ), // Estrella en la barra si hay favorito
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -414,7 +533,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   padding: const EdgeInsets.all(16.0),
                                   child: Row(
                                     children: [
-                                      // LOCAL
                                       Expanded(
                                         child: Column(
                                           children: [
@@ -493,7 +611,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ],
                                       ),
 
-                                      // VISITA
                                       Expanded(
                                         child: Column(
                                           children: [
